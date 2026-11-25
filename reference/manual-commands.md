@@ -15,20 +15,22 @@
 | 01 | `python3 scripts/lab.py check --save` | アカウント・テナント・ワークスペースの照合、Workspace ID の保存 |
 | 02 | `python3 scripts/lab.py ensure-lakehouse` | Lakehouse の作成（既存なら再利用） |
 | 02 | `python3 scripts/lab.py upload-sample` | サンプルを OneLake にアップロードし、サイズを照合 |
-| 02 | `python3 scripts/lab.py notebook deploy-run nb_02_prepare_trips` | 加工 Notebook の配置・実行 |
+| 02〜08 | `python3 scripts/lab.py notebook check <名前>` | Copilot が生成した `work/notebooks/` の Notebook を配置前にオフラインで確認 |
+| 02〜08 | `python3 scripts/lab.py notebook deploy-run <名前> --reference` | 生成がうまくいかない場合に模範解答（`reference/notebooks/`）で配置・実行 |
+| 02 | `python3 scripts/lab.py notebook deploy-run nb_02_prepare_trips` | Copilot が生成した加工 Notebook の配置・実行 |
 | 02 | `python3 scripts/lab.py notebook deploy-run nb_02_validate_trips` | 検証 Notebook の配置・実行 |
 | 03 | `python3 scripts/lab.py shortcut` | 共有接続でショートカットを作成 |
-| 03 | `python3 scripts/lab.py notebook deploy-run nb_03_prepare_dimensions` | マスター整備 |
+| 03 | `python3 scripts/lab.py notebook deploy-run nb_03_prepare_dimensions` | マスター整備（生成した Notebook） |
 | 03 | `python3 scripts/lab.py notebook deploy-run nb_03_validate_dimensions` | マスター・結合の検証 |
 | 04 | `python3 scripts/lab.py ensure-warehouse` | Warehouse の作成（既存なら再利用） |
 | 04 | `python3 scripts/lab.py refresh-sql-endpoint` | SQL 分析エンドポイントのメタデータ更新 |
-| 04 | `python3 scripts/lab.py notebook deploy-run nb_04_build_warehouse` | T-SQL Notebook の配置・実行 |
+| 04 | `python3 scripts/lab.py notebook deploy-run nb_04_build_warehouse` | 生成した T-SQL Notebook の配置・実行 |
 | 04 | `python3 scripts/lab.py notebook deploy-run nb_04_validate_warehouse` | Warehouse の検証 |
 | 05 | `python3 scripts/lab.py semantic-model [--apply]` | モデル定義の生成（`--apply` で作成・更新・更新処理） |
 | 05 | `python3 scripts/lab.py model-check` | DAX で主要な数値を期待値と照合 |
-| 07 | `python3 scripts/lab.py notebook deploy-run nb_07_prepare_ontology` | Ontology 用テーブルの準備 |
+| 07 | `python3 scripts/lab.py notebook deploy-run nb_07_prepare_ontology` | Ontology 用テーブルの準備（生成した Notebook） |
 | 07 | `python3 scripts/lab.py ontology [--apply]` | Ontology 定義の生成（`--apply` で作成・更新・読み戻し） |
-| 08 | `python3 scripts/lab.py notebook deploy-run nb_08_create_agents` | Data Agent 2 つの作成・公開 |
+| 08 | `python3 scripts/lab.py notebook deploy-run nb_08_create_agents` | Data Agent 2 つの作成・公開（生成した Notebook） |
 | 08 | `python3 scripts/lab.py agent-compare` | 2 つの Agent に同じ質問を送り比較 |
 | 08 | `python3 scripts/lab.py agent-ask <agent> "<質問>"` | 1 つの Agent に質問 |
 | 09 | `python3 ../../scripts/rayfin_az.py <rayfin のサブコマンド>` | Azure CLI のサインインで Rayfin を実行 |

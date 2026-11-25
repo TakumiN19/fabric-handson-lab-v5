@@ -1,15 +1,16 @@
 # Lab 02 — Notebook で取り込み・加工・検証
 
-所要時間: 約 30 分　／　前提: [Lab 01](01-sign-in.md) 完了
+所要時間: 約 40 分　／　前提: [Lab 01](01-sign-in.md) 完了
 
-このラボでは、サンプルデータを Lakehouse に取り込み、**Fabric の Notebook アイテム** として保存した処理で
-加工・検証します。V3 では一時的な Spark セッションで処理していたため、処理内容が Fabric に残りませんでした。
+このラボでは、サンプルデータを Lakehouse に取り込み、**GitHub Copilot が仕様書から書いた Notebook** を
+Fabric の Notebook アイテムとして配置して加工し、教材提供の検証 Notebook で答え合わせをします。
+V3 では一時的な Spark セッションで処理していたため、処理内容が Fabric に残りませんでした。
 V4 では、Notebook のコード・実行履歴・出力をポータルで確認できます。
 
 ```text
 data/*.parquet ──アップロード──▶ Lakehouse Files/raw
                                      │
-                     nb_02_prepare_trips（加工・保存）──▶ Delta 表 green_tripdata_2026
+   仕様書 ─Copilot が生成─▶ nb_02_prepare_trips（加工・保存）──▶ Delta 表 green_tripdata_2026
                                      │
                      nb_02_validate_trips（読み取りのみ）──▶ 検証結果
 ```
@@ -53,25 +54,32 @@ data/green_tripdata_2026-04.parquet を Files/raw にアップロードして。
 
 ---
 
-## 2-2. 加工 Notebook を Fabric に配置して実行する
+## 2-2. 加工 Notebook を GitHub Copilot に書かせる
+
+このラボの加工 Notebook は、教材に完成品がありません。**仕様書を渡して、GitHub Copilot に Notebook のコードを書かせます。**
+仕様書は「何を入力し、どのルールで加工し、何を出力するか」だけを書いた設計書です。
+
+| ファイル | 役割 |
+|---|---|
+| [`notebooks/specs/nb_02_prepare_trips.md`](../notebooks/specs/nb_02_prepare_trips.md) | 加工の仕様（入力・出力・加工ルール） |
+| [`notebooks/specs/README.md`](../notebooks/specs/README.md) | すべての Notebook に共通の約束（形式・結果ファイル・禁止事項） |
+| `work/notebooks/nb_02_prepare_trips.ipynb` | **Copilot が生成する Notebook**（あなた専用。Git には含めない） |
 
 🤖 **Copilot に入力**
 
 ```text
-Lab 02 の加工 Notebook を Fabric のアイテムとして配置して、taxi_lakehouse で実行して。
-ローカルでのデータ加工や、一時的な Spark セッションだけで済ませないで。
-完了したら Notebook のリンク、実行状態、保存したテーブルと件数を教えて。
-答え合わせはまだしないで。
+notebooks/specs の共通の約束と nb_02_prepare_trips の仕様を読んで、
+Fabric の PySpark Notebook を work/notebooks/nb_02_prepare_trips.ipynb に生成して。
+生成したら、セルごとに何をしているかを表で説明して、配置前のチェックを通して。まだ Fabric には配置しないで。
 ```
 
 🤖 **Copilot の動き**
 
-- `python3 scripts/lab.py notebook deploy-run nb_02_prepare_trips` を実行します。
-  - リポジトリの `notebooks/nb_02_prepare_trips.ipynb` を、`taxi_lakehouse` を既定 Lakehouse にして配置
-  - Fabric のジョブとして実行し、完了まで待機（Spark の起動を含め 3〜5 分程度）
-  - Notebook が OneLake に書いた実行結果（`Files/lab_results/nb_02_prepare_trips.json`）を読み取り
+- 仕様書を読み、Markdown セル（目的）→ 結果の保存関数 → 読み込み → 加工 → 保存と自己チェック の順で Notebook を書きます。
+- `python3 scripts/lab.py notebook check nb_02_prepare_trips` で、配置前に約束（形式・カーネル・結果ファイル・
+  ID やトークンの直書きがないこと・出力テーブル）をオフラインで確認し、`problems` があれば自分で直します。
 
-### 加工ルール
+### 加工ルール（仕様書から抜粋）
 
 | 対象 | ルール |
 |---|---|
@@ -84,6 +92,32 @@ Lab 02 の加工 Notebook を Fabric のアイテムとして配置して、taxi
 | `passenger_group` | 1 人 `single`／2 人以上 `group`／0 以下 `unknown` |
 | `trip_id` | 欠損のない 8 列で並べた連番。再実行しても同じ値（Lab 07 の Ontology のキー） |
 
+✅ **期待する結果**: `work/notebooks/nb_02_prepare_trips.ipynb` ができ、`notebook check` が `passed: true`。
+
+> 💡 生成されたコードは受講者ごとに少しずつ違って構いません。正しいかどうかは、2-5 の教材提供の検証 Notebook が判定します。
+
+---
+
+## 2-3. 生成した Notebook を Fabric に配置して実行する
+
+🤖 **Copilot に入力**
+
+```text
+生成した nb_02_prepare_trips を Fabric のアイテムとして配置して、taxi_lakehouse で実行して。
+ローカルでのデータ加工や、一時的な Spark セッションだけで済ませないで。
+失敗したら、エラーの原因を説明してから生成した Notebook を直して、成功するまでやり直して。
+完了したら Notebook のリンク、実行状態、保存したテーブルと件数を教えて。答え合わせはまだしないで。
+```
+
+🤖 **Copilot の動き**
+
+- `python3 scripts/lab.py notebook deploy-run nb_02_prepare_trips` を実行します。
+  - `work/notebooks/nb_02_prepare_trips.ipynb` をもう一度チェックし、`taxi_lakehouse` を既定 Lakehouse にして配置
+  - Fabric のジョブとして実行し、完了まで待機（Spark の起動を含め 3〜5 分程度）
+  - Notebook が OneLake に書いた実行結果（`Files/lab_results/nb_02_prepare_trips.json`）を読み取り
+- 失敗した場合は、`result.error`（Notebook が書いたエラー）を読んで原因を説明し、Notebook を直して再実行します。
+  検証 Notebook や期待値を書き換えて通すことはしません。
+
 ✅ **期待する結果**
 
 ```text
@@ -95,12 +129,12 @@ Saved: green_tripdata_2026 — 37,948 rows / 27 columns
 
 ---
 
-## 2-3. ポータルで Notebook を確認する
+## 2-4. ポータルで Notebook を確認する
 
 🌐 **ブラウザ**
 
-1. Copilot が表示した Notebook のリンクを開きます。
-2. セルの順に、読み込み → 加工ルール → 保存 の流れになっていることを確認します。
+1. Copilot が表示した Notebook のリンクを開きます。説明欄が「GitHub Copilot が生成」になっています。
+2. セルの順に、読み込み → 加工ルール → 保存 の流れになっていることを確認します。**このコードは Copilot が書いたものです。**
 3. 上部の **実行** › **最近の実行** で、今回のジョブが成功していることを確認します。
 
 > 💡 Notebook はコードの「置き場所」と「実行記録」を兼ねたアイテムです。後から同じ処理を再実行したり、
@@ -108,7 +142,7 @@ Saved: green_tripdata_2026 — 37,948 rows / 27 columns
 
 ---
 
-## 2-4. 検証 Notebook で答え合わせをする
+## 2-5. 検証 Notebook で答え合わせをする
 
 🤖 **Copilot に入力**
 
@@ -121,8 +155,9 @@ Saved: green_tripdata_2026 — 37,948 rows / 27 columns
 🤖 **Copilot の動き**
 
 - `python3 scripts/lab.py notebook deploy-run nb_02_validate_trips` を実行します。
-- 検証 Notebook は読み取りだけを行い、すべての検証項目を `checks` として返します。
-- 不一致がある場合は `passed: false` となり、Copilot は修正せずに差分を報告します。
+- 検証 Notebook（`notebooks/nb_02_validate_trips.ipynb`）は教材が用意した **採点役** です。読み取りだけを行い、すべての検証項目を `checks` として返します。
+- 不一致がある場合は `passed: false` となり、Copilot はデータを修正せずに差分を報告します。
+  原因が生成した加工ロジックにあれば、仕様書と照らして Notebook を直し、2-3 からやり直します。
 
 ✅ **期待する結果**: `passed: true`（23 項目すべて一致）
 
@@ -149,6 +184,7 @@ Saved: green_tripdata_2026 — 37,948 rows / 27 columns
 ## ✅ チェックポイント
 
 - [ ] `taxi_lakehouse` の `Files/raw` にサンプルがある
+- [ ] Copilot が生成した `work/notebooks/nb_02_prepare_trips.ipynb` が `notebook check` を通過
 - [ ] Notebook `nb_02_prepare_trips` が Fabric にあり、実行が Completed
 - [ ] Notebook `nb_02_validate_trips` の結果が `passed: true`
 
@@ -157,7 +193,9 @@ Saved: green_tripdata_2026 — 37,948 rows / 27 columns
 | 症状 | 🤖 Copilot に入力 |
 |---|---|
 | Notebook が NotStarted のまま | 「nb_02_prepare_trips の実行状態を確認して」。容量が混雑している場合は数分待つ |
-| 実行が Failed | 「nb_02_prepare_trips の失敗理由を表示して、ポータルで見るべきセルを教えて」 |
+| `notebook check` が失敗 | 「problems を 1 つずつ説明して、仕様書に合わせて Notebook を直して」 |
+| 実行が Failed | 「nb_02_prepare_trips の失敗理由を result.error とセル出力から説明して、生成した Notebook を直して再実行して」 |
+| 何度直しても通らない | 「模範解答と自分の Notebook の違いを説明して」→ 先に進む場合は「模範解答（--reference）で配置して実行して」 |
 | 「すでに実行中」と表示される | 「実行中のジョブが終わったら結果だけを表示して」（重複実行はしない） |
 | 検証で不一致 | 「不一致の項目について、期待値・実測値・考えられる原因を教えて。データは変更しないで」 |
 | サインインの期限切れ | 「Azure CLI のサインイン状態を確認して、必要ならデバイスコード方式でサインインし直して」 |

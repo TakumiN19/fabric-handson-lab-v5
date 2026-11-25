@@ -2,7 +2,7 @@
 
 所要時間: 約 30 分　／　前提: [Lab 05](05-semantic-model.md) と [Lab 07](07-ontology.md) 完了
 
-このラボでは、**同じ業務定義（指示）**で、**接続先だけが異なる** 2 つの Data Agent を Notebook で作成・公開し、
+このラボでは、**同じ業務定義（指示）**で、**接続先だけが異なる** 2 つの Data Agent を、Copilot が書いた Notebook で作成・公開し、
 同じ質問を送って回答を比べます。
 
 | Agent | 接続先 | 質問の解き方 |
@@ -15,21 +15,25 @@
 
 ---
 
-## 8-1. Notebook で 2 つの Data Agent を作成・公開する
+## 8-1. Data Agent 作成 Notebook を Copilot に書かせて実行する
 
 🤖 **Copilot に入力**
 
 ```text
-Lab 08 の Data Agent 作成 Notebook を Fabric に配置して実行して。
+notebooks/specs の nb_08_create_agents の仕様を読んで、fabric-data-agent-sdk で Data Agent を作る Notebook を
+work/notebooks/nb_08_create_agents.ipynb に生成して。チェックを通して Fabric に配置・実行して。
 sm_taxi に接続する taxi_metrics_agent と、onto_taxi に接続する taxi_ontology_agent を作成して公開して。
-指示は教材の設定ファイルのものを使って、完了したら作成された Agent と接続先を教えて。
+指示は教材の設定ファイルのものを使って、完了したら作成された Agent と接続先、Agent ごとの成否を教えて。
 ```
 
 🤖 **Copilot の動き**
 
-- `python3 scripts/lab.py notebook deploy-run nb_08_create_agents` を実行します。
-  - `config/agents.json` の内容を Notebook に埋め込んで配置し、Fabric 上で実行
-  - Notebook 内で `fabric-data-agent-sdk` を使い、次を順に実行（何度実行しても同じ構成になる）
+- 仕様書 [`notebooks/specs/nb_08_create_agents.md`](../notebooks/specs/nb_08_create_agents.md) から Notebook を生成します。
+  - Agent 名・指示は書かず、`{{AGENT_CONFIG_B64}}`（配置時に `config/agents.json` が埋め込まれる）から読む
+  - 追加直後のデータソースが一覧に出るまで待つ・Agent ごとに失敗を分ける、といった堅牢化も仕様書どおりに入れる
+- `python3 scripts/lab.py notebook check nb_08_create_agents` で約束を確認してから、`python3 scripts/lab.py notebook deploy-run nb_08_create_agents` で配置・実行します。
+- 失敗したら `result.error` とセル出力から原因を説明し、生成した Notebook を直して再実行します（模範解答は `--reference`）。
+- Notebook 内では `fabric-data-agent-sdk` を使い、次を順に実行します（何度実行しても同じ構成になる）
 
     | 処理 | SDK のメソッド |
     |---|---|
@@ -39,7 +43,8 @@ sm_taxi に接続する taxi_metrics_agent と、onto_taxi に接続する taxi_
     | Ontology の追加・全エンティティの選択 | `add_staging_ontology` / `select_entities` |
     | 公開（説明文は MCP ツールの説明になる） | `publish_staging` |
 
-✅ **期待する結果**: `passed: true`、2 つの Agent が公開済み。
+✅ **期待する結果**: `passed: true`、`agents` の 2 つの Agent が `published: true`。
+片方だけ失敗した場合は、`agents.<名前>.error` に理由が入ります（もう片方は作成・公開されます）。
 
 🌐 **ブラウザ**（任意）: ワークスペースで 2 つの Data Agent を開き、データソースと指示を確認します。
 
@@ -106,7 +111,7 @@ taxi_ontology_agent に「Brooklyn で降車したトリップが最も多い乗
 
 ## ✅ チェックポイント
 
-- [ ] `nb_08_create_agents` で 2 つの Agent が作成・公開された
+- [ ] Copilot が生成した `nb_08_create_agents` で 2 つの Agent が作成・公開された
 - [ ] `agent-compare` で両 Agent から回答が得られた
 - [ ] Q1〜Q6 の回答を期待値と比べ、違いを説明できた
 
@@ -114,6 +119,7 @@ taxi_ontology_agent に「Brooklyn で降車したトリップが最も多い乗
 
 | 症状 | 🤖 Copilot に入力 |
 |---|---|
+| `IndexError` / データソースが見つからない | 追加直後の反映待ちが不足。「仕様書の反映待ちのルールどおりに Notebook を直して再実行して」 |
 | `HTTP 403` / `404`（MCP） | 「Agent が公開済みか確認して。公開されていなければ nb_08_create_agents を再実行して」 |
 | 回答が「データがない」 | 公開直後は数分かかることがある。数分待って再質問 |
 | Copilot のテナント設定エラー | 講師に連絡（テナント設定の反映に最大 1 時間） |

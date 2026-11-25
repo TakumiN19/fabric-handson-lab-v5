@@ -20,6 +20,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,16 +36,29 @@ PORTAL = "https://app.fabric.microsoft.com"
 LINEAGE_NAMESPACE = uuid.UUID("6f3c9d0e-3b8b-4b0e-9a63-2f0f4c1f7a11")
 RESULTS_FOLDER = "Files/lab_results"
 
+GENERATED_NOTEBOOKS = "work/notebooks"
+REFERENCE_NOTEBOOKS = "reference/notebooks"
+SPECS = "notebooks/specs"
+# source "generated": participants have GitHub Copilot write the notebook from notebooks/specs/<name>.md
+#                     into work/notebooks/ (answer key in reference/notebooks/, used with --reference).
+# source "provided":  read-only graders shipped in notebooks/.
 NOTEBOOKS = {
-    "nb_02_prepare_trips": {"file": "notebooks/nb_02_prepare_trips.ipynb", "binding": "lakehouse"},
-    "nb_02_validate_trips": {"file": "notebooks/nb_02_validate_trips.ipynb", "binding": "lakehouse"},
-    "nb_03_prepare_dimensions": {"file": "notebooks/nb_03_prepare_dimensions.ipynb", "binding": "lakehouse"},
-    "nb_03_validate_dimensions": {"file": "notebooks/nb_03_validate_dimensions.ipynb", "binding": "lakehouse"},
-    "nb_04_build_warehouse": {"file": "notebooks/nb_04_build_warehouse.sql", "binding": "warehouse"},
-    "nb_04_validate_warehouse": {"file": "notebooks/nb_04_validate_warehouse.ipynb", "binding": "lakehouse"},
-    "nb_07_prepare_ontology": {"file": "notebooks/nb_07_prepare_ontology.ipynb", "binding": "lakehouse"},
-    "nb_08_create_agents": {"file": "notebooks/nb_08_create_agents.ipynb", "binding": "lakehouse"},
+    "nb_02_prepare_trips": {"file": "nb_02_prepare_trips.ipynb", "binding": "lakehouse", "source": "generated",
+                            "outputs": ["green_tripdata_2026"]},
+    "nb_02_validate_trips": {"file": "nb_02_validate_trips.ipynb", "binding": "lakehouse", "source": "provided"},
+    "nb_03_prepare_dimensions": {"file": "nb_03_prepare_dimensions.ipynb", "binding": "lakehouse", "source": "generated",
+                                 "outputs": ["taxi_zone_lookup", "vendor_lookup", "ratecode_lookup", "payment_type_lookup", "trip_type_lookup"]},
+    "nb_03_validate_dimensions": {"file": "nb_03_validate_dimensions.ipynb", "binding": "lakehouse", "source": "provided"},
+    "nb_04_build_warehouse": {"file": "nb_04_build_warehouse.sql", "binding": "warehouse", "source": "generated",
+                              "outputs": ["fact_trips", "dim_vendor", "dim_ratecode", "dim_payment_type", "dim_trip_type",
+                                          "dim_pickup_zone", "dim_dropoff_zone"]},
+    "nb_04_validate_warehouse": {"file": "nb_04_validate_warehouse.ipynb", "binding": "lakehouse", "source": "provided"},
+    "nb_07_prepare_ontology": {"file": "nb_07_prepare_ontology.ipynb", "binding": "lakehouse", "source": "generated",
+                               "outputs": ["onto_trips", "onto_zones", "onto_vendors"]},
+    "nb_08_create_agents": {"file": "nb_08_create_agents.ipynb", "binding": "lakehouse", "source": "generated",
+                            "outputs": [], "pip": True, "requires": ["{{AGENT_CONFIG_B64}}"]},
 }
+NOTEBOOK_PLACEHOLDERS = {"lakehouse": {"{{WORKSHOP_CONFIG_B64}}", "{{AGENT_CONFIG_B64}}"}, "warehouse": {"{{WAREHOUSE_ID}}"}}
 
 
 class LabError(Exception):
@@ -365,21 +379,116 @@ def cmd_refresh_sql_endpoint(args: argparse.Namespace) -> None:
 # --------------------------------------------------------------------------- commands: notebooks
 
 
-def notebook_definition(name: str, workspace_id: str, binding_id: str, binding_name: str) -> dict[str, Any]:
+def notebook_path(name: str, reference: bool = False) -> Path:
     spec = NOTEBOOKS[name]
-    source = (ROOT / spec["file"]).read_text(encoding="utf-8")
+    if spec["source"] == "provided":
+        return ROOT / "notebooks" / spec["file"]
+    return ROOT / (REFERENCE_NOTEBOOKS if reference else GENERATED_NOTEBOOKS) / spec["file"]
+
+
+def read_notebook_source(name: str, reference: bool = False) -> tuple[Path, str]:
+    path = notebook_path(name, reference)
+    if not path.exists():
+        raise LabError(
+            f"{path.relative_to(ROOT)} がありません。{SPECS}/{name}.md の仕様に従って GitHub Copilot で生成してください"
+            "（模範解答で進める場合は --reference を付けます）。")
+    return path, path.read_text(encoding="utf-8")
+
+
+def _cell_lines(cell: dict[str, Any]) -> list[str]:
+    source = cell.get("source", [])
+    return source.splitlines(keepends=True) if isinstance(source, str) else list(source)
+
+
+GUID_PATTERN = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+SECRET_PATTERNS = [re.compile(p) for p in (r"eyJ[A-Za-z0-9_-]{20,}\.", r"(?i)\bbearer\s+[A-Za-z0-9._-]{20,}",
+                                            r"(?i)client_secret", r"(?i)(password|passwd)\s*=")]
+
+
+def check_notebook(name: str, reference: bool = False) -> dict[str, Any]:
+    """Offline contract check for a notebook before it is deployed (no Fabric access)."""
+    spec = NOTEBOOKS[name]
+    path, text = read_notebook_source(name, reference)
+    problems: list[str] = []
+    allowed = NOTEBOOK_PLACEHOLDERS[spec["binding"]]
+    cells: list[str] = []
+    for placeholder in set(re.findall(r"\{\{[^{}]*\}\}", text)) - allowed:
+        problems.append(f"使えないプレースホルダー {placeholder}（使えるのは {', '.join(sorted(allowed))}）")
+    for required in spec.get("requires", []):
+        if required not in text:
+            problems.append(f"{required} を使って設定を読み込んでいません")
+    if GUID_PATTERN.search(text):
+        problems.append("GUID が直書きされています。ID は lab.py が配置時に埋め込みます（既定 Lakehouse / {{WAREHOUSE_ID}}）")
+    for pattern in SECRET_PATTERNS:
+        if pattern.search(text):
+            problems.append("トークン・パスワードのような文字列があります。Notebook に資格情報を書かないでください")
+            break
+    if spec["binding"] == "warehouse":
+        if not text.startswith("-- Fabric notebook source"):
+            problems.append("1 行目が '-- Fabric notebook source' ではありません（Fabric の T-SQL Notebook 形式）")
+        if '"name": "sqldatawarehouse"' not in text or "{{WAREHOUSE_ID}}" not in text:
+            problems.append("ヘッダーの kernel_info（sqldatawarehouse）と default_warehouse の {{WAREHOUSE_ID}} が必要です")
+        for table in spec["outputs"]:
+            if not re.search(rf"CREATE\s+TABLE\s+dbo\.{table}\s+AS\b", text, flags=re.IGNORECASE):
+                problems.append(f"CREATE TABLE dbo.{table} AS（CTAS）がありません")
+        cells = [block.strip().splitlines()[0] for block in text.split("-- CELL ********************")[1:] if block.strip()]
+        return {"notebook": name, "file": str(path.relative_to(ROOT)), "passed": not problems, "problems": problems, "cells": cells}
+    try:
+        notebook = json.loads(text)
+    except json.JSONDecodeError as error:
+        return {"notebook": name, "file": str(path.relative_to(ROOT)), "passed": False, "problems": [f"JSON として読めません: {error}"], "cells": []}
+    if notebook.get("nbformat") != 4:
+        problems.append("nbformat は 4 にしてください")
+    kernel = ((notebook.get("metadata") or {}).get("kernelspec") or {}).get("name") or ((notebook.get("metadata") or {}).get("kernel_info") or {}).get("name")
+    if kernel != "synapse_pyspark":
+        problems.append(f"カーネルは synapse_pyspark にしてください（現在: {kernel}）")
+    code_text = ""
+    for index, cell in enumerate(notebook.get("cells", [])):
+        lines = _cell_lines(cell)
+        first = next((line.strip() for line in lines if line.strip()), "")
+        cells.append(f"[{cell.get('cell_type')}] {first[:90]}")
+        if cell.get("cell_type") != "code":
+            continue
+        if cell.get("outputs") or cell.get("execution_count") is not None:
+            problems.append(f"セル {index}: 出力を消してください（outputs [] / execution_count null）")
+        source = "".join(lines)
+        magic = [line for line in lines if line.lstrip().startswith(("%", "!"))]
+        if magic and not (spec.get("pip") and all(line.lstrip().startswith("%pip install") for line in magic)):
+            problems.append(f"セル {index}: %pip / シェルコマンドはこの Notebook では使えません")
+        body = "".join(line for line in lines if not line.lstrip().startswith(("%", "!")))
+        for placeholder in allowed:
+            body = body.replace(placeholder, "e30=")
+        try:
+            compile(body, f"{name}:cell{index}", "exec")
+        except SyntaxError as error:
+            problems.append(f"セル {index}: 構文エラー {error.msg}（{error.lineno} 行目）")
+        code_text += source + "\n"
+    if "save_result(" not in code_text or not re.search(rf"[\"']{name}[\"']", code_text):
+        problems.append(f'save_result("{name}", ...) で Files/lab_results/{name}.json に結果を書いていません')
+    if "Files/lab_results/" not in code_text:
+        problems.append("結果の保存先 Files/lab_results/ がありません")
+    for table in spec.get("outputs", []):
+        if table not in code_text:
+            problems.append(f"出力テーブル {table} を書いていません")
+    return {"notebook": name, "file": str(path.relative_to(ROOT)), "passed": not problems, "problems": problems, "cells": cells}
+
+
+def notebook_definition(name: str, workspace_id: str, binding_id: str, binding_name: str, reference: bool = False) -> dict[str, Any]:
+    spec = NOTEBOOKS[name]
+    path, source = read_notebook_source(name, reference)
+    label = path.relative_to(ROOT)
     if spec["binding"] == "warehouse":
         content = source.replace("{{WAREHOUSE_ID}}", binding_id)
         if "{{" in content:
-            raise LabError(f"{spec['file']} に未解決のプレースホルダーがあります。")
+            raise LabError(f"{label} に未解決のプレースホルダーがあります。")
         return {"parts": [{"path": "notebook-content.sql", "payload": b64(content), "payloadType": "InlineBase64"}]}
     notebook = json.loads(source)
     injected = {"{{WORKSHOP_CONFIG_B64}}": b64(json.dumps(load_workshop(), ensure_ascii=False)),
                 "{{AGENT_CONFIG_B64}}": b64((ROOT / "config" / "agents.json").read_text(encoding="utf-8"))}
     for cell in notebook.get("cells", []):
-        cell["source"] = [_inject(line, injected) for line in cell.get("source", [])]
+        cell["source"] = [_inject(line, injected) for line in _cell_lines(cell)]
     if any("{{" in line and "}}" in line for cell in notebook.get("cells", []) for line in cell.get("source", [])):
-        raise LabError(f"{spec['file']} に未解決のプレースホルダーがあります。")
+        raise LabError(f"{label} に未解決のプレースホルダーがあります。")
     notebook.setdefault("metadata", {})["dependencies"] = {
         "lakehouse": {
             "default_lakehouse": binding_id,
@@ -405,20 +514,29 @@ def binding_for(fabric: Fabric, workspace_id: str, name: str) -> tuple[str, str]
     return item["id"], item["displayName"]  # type: ignore[index]
 
 
-def deploy_notebook(fabric: Fabric, workspace_id: str, name: str) -> dict[str, Any]:
+def deploy_notebook(fabric: Fabric, workspace_id: str, name: str, reference: bool = False) -> dict[str, Any]:
     if name not in NOTEBOOKS:
         raise LabError(f"未知の Notebook です: {name}")
+    checked = check_notebook(name, reference)
+    if not checked["passed"]:
+        raise LabError(f"{checked['file']} が Notebook の約束を満たしていないため配置しません:\n- " + "\n- ".join(checked["problems"]))
     binding_id, binding_name = binding_for(fabric, workspace_id, name)
-    definition = notebook_definition(name, workspace_id, binding_id, binding_name)
+    definition = notebook_definition(name, workspace_id, binding_id, binding_name, reference)
     existing = fabric.item(workspace_id, "Notebook", name, required=False)
     if existing:
         status, headers, body = fabric.request("POST", f"/workspaces/{workspace_id}/notebooks/{existing['id']}/updateDefinition", {"definition": definition})
         fabric.lro(status, headers, body)
         return existing
     status, headers, body = fabric.request("POST", f"/workspaces/{workspace_id}/notebooks", {
-        "displayName": name, "description": "Fabric Hands-on Lab V4", "definition": definition})
+        "displayName": name, "description": "Fabric Hands-on Lab V4" + notebook_origin(name, reference), "definition": definition})
     fabric.lro(status, headers, body)
     return fabric.item(workspace_id, "Notebook", name)  # type: ignore[return-value]
+
+
+def notebook_origin(name: str, reference: bool) -> str:
+    if NOTEBOOKS[name]["source"] == "provided":
+        return "（検証用・教材提供）"
+    return "（模範解答）" if reference else "（GitHub Copilot が生成）"
 
 
 def read_result(fabric: Fabric, workspace_id: str, name: str) -> Any:
@@ -441,6 +559,7 @@ def run_notebook(fabric: Fabric, workspace_id: str, notebook: dict[str, Any], na
         lakehouse_id, lakehouse_name = binding_for(fabric, workspace_id, name)
         configuration = {"defaultLakehouse": {"name": lakehouse_name, "id": lakehouse_id, "workspaceId": workspace_id}}
     body = {"executionData": {"configuration": configuration}} if configuration else None
+    submitted = time.time()
     status, headers, _ = fabric.request("POST", f"{base}?jobType=RunNotebook", body or {})
     location = headers.get("Location") or headers.get("location")
     if status != 202 or not location:
@@ -454,29 +573,67 @@ def run_notebook(fabric: Fabric, workspace_id: str, notebook: dict[str, Any], na
         state = job.get("status")
         if state in ("Completed", "Failed", "Cancelled", "Deduped"):
             return {"jobId": job_id, "status": state, "failureReason": (job.get("failureReason") or {}).get("message"),
-                    "seconds": round(time.time() - started)}
+                    "seconds": round(time.time() - started), "submittedEpoch": submitted}
         if time.time() - started > 3600:
             raise LabError(f"{name} が 60 分以内に完了しません。ポータルの Notebook 実行履歴を確認してください（Job {job_id}）。")
 
 
+def fresh_result(result: Any, submitted: float) -> tuple[Any, bool]:
+    """Ignore a result file left over from an earlier run (it is not deleted before a run)."""
+    if not isinstance(result, dict):
+        return result, False
+    finished = str(result.get("finishedAtUtc") or "")
+    try:
+        finished_epoch = datetime.fromisoformat(finished.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None, True
+    if finished_epoch < submitted - 60:
+        return None, True
+    return result, False
+
+
 def cmd_notebook(args: argparse.Namespace) -> None:
+    reference = bool(getattr(args, "reference", False))
+    if args.action == "check":
+        checked = check_notebook(args.name, reference)
+        checked["source"] = NOTEBOOKS[args.name]["source"]
+        if NOTEBOOKS[args.name]["source"] == "generated":
+            checked["spec"] = f"{SPECS}/{args.name}.md"
+        print(json.dumps(checked, ensure_ascii=False, indent=2))
+        if not checked["passed"]:
+            raise LabError("Notebook の約束を満たしていません。problems を直してから、もう一度 check してください。")
+        return
     fabric, workspace_id = context()
     output: dict[str, Any] = {"notebook": args.name}
-    notebook = deploy_notebook(fabric, workspace_id, args.name) if args.action in ("deploy", "deploy-run") else fabric.item(workspace_id, "Notebook", args.name)
+    if args.action in ("deploy", "deploy-run"):
+        notebook = deploy_notebook(fabric, workspace_id, args.name, reference)
+        output["deployedFrom"] = str(notebook_path(args.name, reference).relative_to(ROOT))
+    else:
+        notebook = fabric.item(workspace_id, "Notebook", args.name)
     output["link"] = portal_link(workspace_id, "synapsenotebooks", notebook["id"])  # type: ignore[index]
     if args.action in ("run", "deploy-run"):
-        output["run"] = run_notebook(fabric, workspace_id, notebook, args.name)  # type: ignore[arg-type]
+        run = run_notebook(fabric, workspace_id, notebook, args.name)  # type: ignore[arg-type]
+        submitted = run.pop("submittedEpoch")
+        output["run"] = run
         if NOTEBOOKS[args.name]["binding"] == "lakehouse":
-            output["result"] = read_result(fabric, workspace_id, args.name)
+            output["result"], stale = fresh_result(read_result(fabric, workspace_id, args.name), submitted)
+            if stale:
+                output["staleResultIgnored"] = "前回の実行の結果ファイルしかないため表示しません（今回の実行は結果を書く前に止まりました）。"
     if args.action == "result":
         output["result"] = read_result(fabric, workspace_id, args.name)
     print(json.dumps(output, ensure_ascii=False, indent=2))
     run = output.get("run") or {}
-    if run and run.get("status") != "Completed":
-        raise LabError(f"Notebook の実行が {run.get('status')} で終了しました。リンク先の実行履歴でセルのエラーを確認してください。")
     result = output.get("result")
+    if run and run.get("status") != "Completed":
+        hint = ""
+        if NOTEBOOKS[args.name]["source"] == "generated":
+            hint = (f" result.error（あれば）とリンク先のセル出力でエラーを確認し、work/notebooks の Notebook を直して"
+                    f" check → deploy-run をやり直してください。仕様: {SPECS}/{args.name}.md")
+        raise LabError(f"Notebook の実行が {run.get('status')} で終了しました。{hint}")
     if isinstance(result, dict) and result.get("passed") is False:
-        raise LabError("検証 Notebook が期待値との不一致を報告しました。差分は result.checks を参照してください（データは変更していません）。")
+        if NOTEBOOKS[args.name]["source"] == "provided":
+            raise LabError("検証 Notebook が期待値との不一致を報告しました。差分は result.checks を参照してください（データは変更していません）。")
+        raise LabError("Notebook が自己チェックの失敗を報告しました。result の checks / error を見て、Notebook を直して再実行してください。")
 
 
 # --------------------------------------------------------------------------- commands: semantic model & ontology
@@ -589,7 +746,7 @@ ONTOLOGY_RELATIONSHIPS = [
 ]
 
 
-def ontology_parts(name: str, sql_endpoint: str, lakehouse_id: str) -> list[dict[str, str]]:
+def ontology_parts(name: str, sql_endpoint: str, sql_endpoint_id: str) -> list[dict[str, str]]:
     files: dict[str, str] = {
         ".platform": json.dumps({
             "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
@@ -598,7 +755,7 @@ def ontology_parts(name: str, sql_endpoint: str, lakehouse_id: str) -> list[dict
         "database.tmdl": "database\n\tcompatibilityLevel: 1000000\n",
         "expressions.tmdl": (
             "expression DatabaseQuery =\n\t\tlet\n"
-            f"\t\t    database = Sql.Database(\"{sql_endpoint}\", \"{lakehouse_id}\")\n"
+            f"\t\t    database = Sql.Database(\"{sql_endpoint}\", \"{sql_endpoint_id}\")\n"
             "\t\tin\n\t\t    database\n"
             f"\tlineageTag: {tag('onto', 'expression')}\n"
         ),
@@ -732,7 +889,7 @@ def cmd_ontology(args: argparse.Namespace) -> None:
     workshop = load_workshop()["items"]
     lakehouse = fabric.item(workspace_id, "Lakehouse", workshop["lakehouse"])
     endpoint = wait_sql_endpoint(fabric, workspace_id, lakehouse["id"])  # type: ignore[index]
-    parts = ontology_parts(workshop["ontology"], endpoint["connectionString"], lakehouse["id"])  # type: ignore[index]
+    parts = ontology_parts(workshop["ontology"], endpoint["connectionString"], endpoint["id"])  # type: ignore[index]
     preview = write_preview("ontology", parts)
     output: dict[str, Any] = {"preview": str(preview.relative_to(ROOT)), "parts": [p["path"] for p in parts]}
     if args.apply:
@@ -841,8 +998,11 @@ def main() -> int:
     sub.add_parser("shortcut").set_defaults(func=cmd_shortcut)
     sub.add_parser("refresh-sql-endpoint").set_defaults(func=cmd_refresh_sql_endpoint)
     notebook = sub.add_parser("notebook", help="Deploy/run a lab notebook as a Fabric item")
-    notebook.add_argument("action", choices=["deploy", "run", "deploy-run", "result"])
+    notebook.add_argument("action", choices=["check", "deploy", "run", "deploy-run", "result"],
+                          help="check = offline contract check of the notebook file before deploying")
     notebook.add_argument("name", choices=sorted(NOTEBOOKS))
+    notebook.add_argument("--reference", action="store_true",
+                          help=f"use the answer key in {REFERENCE_NOTEBOOKS}/ instead of the Copilot-generated {GENERATED_NOTEBOOKS}/")
     notebook.set_defaults(func=cmd_notebook)
     model = sub.add_parser("semantic-model", help="Generate (and with --apply deploy) the Direct Lake model")
     model.add_argument("--apply", action="store_true")

@@ -21,7 +21,9 @@
 | 用語 | 定義 | 本ハンズオンでの使われ方 |
 |---|---|---|
 | Notebook | コード・説明・実行結果をまとめた Fabric アイテム。ジョブとして実行できる | Lab 02〜04・07・08 の加工・検証・Agent 作成 |
-| T-SQL Notebook | Warehouse に接続して T-SQL を実行する Notebook | `nb_04_build_warehouse` |
+| Notebook 仕様書 | 入力・出力・加工ルール・結果の約束だけを書いた設計書。GitHub Copilot がこれを読んで Notebook のコードを書く | `notebooks/specs/` → `work/notebooks/` |
+| 検証 Notebook | 教材が用意した読み取り専用の採点役。生成した Notebook の結果を期待値と照合する | `nb_0x_validate_*` |
+| T-SQL Notebook | Warehouse に接続して T-SQL を実行する Notebook | `nb_04_build_warehouse`（Copilot が生成） |
 | 既定の Lakehouse | Notebook が `Tables`・`Files` の相対パスで参照する Lakehouse | `scripts/lab.py` が `taxi_lakehouse` を設定 |
 | メダリオンアーキテクチャ | 生データ（Bronze）→ 整備（Silver）→ 分析用（Gold）と段階的に整える設計 | Lab 02〜05 の流れ |
 | CTAS | `CREATE TABLE AS SELECT`。クエリ結果から表を作る | Lab 04 の Warehouse の表 |

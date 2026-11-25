@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Generate the Lab V4 Fabric notebooks from readable cell sources.
 
+Two kinds of notebooks are produced:
+
+* provided graders (read-only validators) -> notebooks/
+* answer keys for the notebooks that participants generate with GitHub Copilot
+  from notebooks/specs/*.md -> reference/notebooks/ (used by `--reference`)
+
 Edit this file, run `python3 scripts/dev/build_notebooks.py`, and commit both
 this file and the generated notebooks. tests/validate_repo.py fails when the
 committed notebooks drift from this generator.
@@ -13,6 +19,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "notebooks"
+REFERENCE_OUT = ROOT / "reference" / "notebooks"
+GENERATED = {"nb_02_prepare_trips", "nb_03_prepare_dimensions", "nb_07_prepare_ontology", "nb_08_create_agents"}
 
 RESULT_HELPER = '''import json
 from datetime import datetime, timezone
@@ -402,6 +410,7 @@ NOTEBOOKS["nb_08_create_agents"] = [
     code(RESULT_HELPER),
     code('''import base64
 import json
+import time
 import warnings
 
 from fabric.dataagent.client import create_data_agent
@@ -424,30 +433,44 @@ def select_all(datasource, root_id=None):
             break'''),
     code('''summary = {}
 
-metrics = AGENTS["metricsAgent"]
-agent = create_data_agent(metrics["name"])
-agent.update_settings(ai_instructions="\\n".join(metrics["instructions"]))
-existing = [ds for ds in agent.list_datasources()
-            if ds.get_configuration().get("displayName") == metrics["source"]["item"]]
-if not existing:
-    agent.add_staging_datasource(metrics["source"]["item"], type=metrics["source"]["type"])
-    existing = [ds for ds in agent.list_datasources()
-                if ds.get_configuration().get("displayName") == metrics["source"]["item"]]
-datasource = existing[0]
-select_all(datasource)
-datasource.update_configuration(description="NYC green taxi trips April 2026: fact_trips with vendor, payment, trip type, pickup and dropoff zone dimensions.")
-agent.publish_staging(description=metrics["description"])
-summary[metrics["name"]] = {"source": metrics["source"], "published": True}'''),
-    code('''onto = AGENTS["ontologyAgent"]
-agent = create_data_agent(onto["name"])
-agent.update_settings(ai_instructions="\\n".join(onto["instructions"]))
-attached = [o for o in agent.list_ontologies() if o.get_configuration().get("displayName") == onto["source"]["item"]]
-ontology = attached[0] if attached else agent.add_staging_ontology(onto["source"]["item"])
-ontology.select_entities()
-agent.publish_staging(description=onto["description"])
-summary[onto["name"]] = {"source": onto["source"], "published": True}
+def find_source(list_sources, name, attempts=6, wait_seconds=10):
+    """A just-added source can take a few seconds to appear in the list (eventual consistency)."""
+    for attempt in range(attempts):
+        found = [s for s in list_sources() if s.get_configuration().get("displayName") == name]
+        if found:
+            return found[0]
+        time.sleep(wait_seconds)
+    raise RuntimeError(f"data source {name} did not appear after {attempts} attempts")
 
-save_result("nb_08_create_agents", {"passed": True, "agents": summary,
+def build_agent(config, attach):
+    try:
+        agent = create_data_agent(config["name"])
+        agent.update_settings(ai_instructions="\\n".join(config["instructions"]))
+        attach(agent, config)
+        agent.publish_staging(description=config["description"])
+        summary[config["name"]] = {"source": config["source"], "published": True}
+    except Exception as error:  # keep going so the other agent is still created
+        summary[config["name"]] = {"source": config["source"], "published": False,
+                                   "error": f"{type(error).__name__}: {error}"[:500]}
+
+def attach_semantic_model(agent, config):
+    name = config["source"]["item"]
+    if not [s for s in agent.list_datasources() if s.get_configuration().get("displayName") == name]:
+        agent.add_staging_datasource(name, type=config["source"]["type"])
+    datasource = find_source(agent.list_datasources, name)
+    select_all(datasource)
+    datasource.update_configuration(description="NYC green taxi trips April 2026: fact_trips with vendor, payment, trip type, pickup and dropoff zone dimensions.")
+
+build_agent(AGENTS["metricsAgent"], attach_semantic_model)'''),
+    code('''def attach_ontology(agent, config):
+    name = config["source"]["item"]
+    attached = [o for o in agent.list_ontologies() if o.get_configuration().get("displayName") == name]
+    ontology = attached[0] if attached else agent.add_staging_ontology(name)
+    ontology.select_entities()
+
+build_agent(AGENTS["ontologyAgent"], attach_ontology)
+
+save_result("nb_08_create_agents", {"passed": all(a["published"] for a in summary.values()), "agents": summary,
                                      "next": "scripts/lab.py agent-compare で 2 つの Agent に同じ質問をして比較します。"})'''),
 ]
 
@@ -570,13 +593,14 @@ def tsql_notebook() -> str:
 
 
 def render() -> dict[Path, str]:
-    files = {OUT / f"{name}.ipynb": json.dumps(notebook(cells), ensure_ascii=False, indent=1) + "\n" for name, cells in NOTEBOOKS.items()}
-    files[OUT / "nb_04_build_warehouse.sql"] = tsql_notebook()
+    files = {(REFERENCE_OUT if name in GENERATED else OUT) / f"{name}.ipynb": json.dumps(notebook(cells), ensure_ascii=False, indent=1) + "\n"
+             for name, cells in NOTEBOOKS.items()}
+    files[REFERENCE_OUT / "nb_04_build_warehouse.sql"] = tsql_notebook()
     return files
 
 
 if __name__ == "__main__":
-    OUT.mkdir(exist_ok=True)
     for path, content in render().items():
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         print(f"wrote {path.relative_to(ROOT)}")

@@ -40,10 +40,12 @@ V4 の `scripts/rayfin_az.py` は、Rayfin が公式にサポートする `RAYFI
 
 ## Data Agent（Lab 08）
 
-- 作成・公開は `nb_08_create_agents` Notebook で、`fabric-data-agent-sdk==0.1.36a0` を使います。
+- 作成・公開は受講者の Copilot が [`notebooks/specs/nb_08_create_agents.md`](../notebooks/specs/nb_08_create_agents.md) から生成した `nb_08_create_agents` Notebook で、`fabric-data-agent-sdk==0.1.36a0` を使います（模範解答は `reference/notebooks/`）。
   - セマンティックモデル: `add_staging_datasource`（公開 API）
   - Ontology: `add_staging_ontology`（コンテキストソース。**Notebook の実行環境が必要**なため Notebook で実行）
   - 公開: `publish_staging`。公開時の説明文が MCP ツールの説明になります。
+- 追加直後のデータソースは一覧への反映が遅れることがあります。仕様書で再取得（10 秒 × 最大 6 回）を必須にしています。
+- Ontology の追加で `401 CUSTOMER_UNAUTHORIZED`（`Failed to generate MWC token for OntologyWorkload`）が返る場合は、テナントの Ontology / Data Agent 設定と受講者の権限を確認してください。Agent ごとに失敗を分けているため、`taxi_metrics_agent` は作成・公開されます。
 - Notebook 内の `%pip install` が実行時に許可されていない環境では失敗します（Gate G6）。
   その場合は、ワークスペースに Environment を作成して SDK を登録し、Notebook に関連付けてください。
 - 代替（ポータル）: ワークスペース › **新しい項目 › Data agent** で作成し、データソースに `sm_taxi`／`onto_taxi` を追加して、

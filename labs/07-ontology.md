@@ -39,16 +39,22 @@ Ontology の価値は、業務用語と関係を名前付きで定義し、複�
 
 ---
 
-## 7-1. Ontology 用のテーブルを Notebook で準備する
+## 7-1. Ontology 用のテーブルを準備する Notebook を Copilot に書かせる
 
 🤖 **Copilot に入力**
 
 ```text
-Lab 07 の Ontology 用テーブルを準備する Notebook を Fabric に配置して実行して。
+notebooks/specs の nb_07_prepare_ontology の仕様を読んで、Ontology 用テーブルを作る PySpark Notebook を
+work/notebooks/nb_07_prepare_ontology.ipynb に生成して。チェックを通して Fabric に配置・実行して。
 Trip・Zone・Vendor の各テーブルの件数とキーの一意性、合計金額が変わっていないことを教えて。
+失敗したら原因を説明して Notebook を直して。
 ```
 
-🤖 **Copilot の動き**: `python3 scripts/lab.py notebook deploy-run nb_07_prepare_ontology`
+🤖 **Copilot の動き**
+
+- 仕様書 [`notebooks/specs/nb_07_prepare_ontology.md`](../notebooks/specs/nb_07_prepare_ontology.md) から、列名・型を Ontology の定義に合わせて生成します（自己チェック付き）。
+- `python3 scripts/lab.py notebook check nb_07_prepare_ontology` で約束を確認してから、`python3 scripts/lab.py notebook deploy-run nb_07_prepare_ontology` で配置・実行します。
+- 失敗したら `result.error` とセル出力から原因を説明し、生成した Notebook を直して再実行します（模範解答は `--reference`）。
 
 ✅ **期待する結果**: `passed: true`（`onto_trips` 37,948 件 / `onto_zones` 265 件 / `onto_vendors` 2 件、キー重複 0、合計金額不変）
 
@@ -105,7 +111,7 @@ onto_taxi に「Manhattan で乗車して Brooklyn で降車したトリップ�
 
 ## ✅ チェックポイント
 
-- [ ] `nb_07_prepare_ontology` が `passed: true`
+- [ ] Copilot が生成した `nb_07_prepare_ontology` が `passed: true`
 - [ ] `onto_taxi` が作成され、定義を読み戻せた
 - [ ] Ontology への質問で 2,340 件が返った
 

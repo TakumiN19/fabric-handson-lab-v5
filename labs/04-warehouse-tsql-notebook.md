@@ -35,23 +35,27 @@ taxi_lakehouse（Delta）                    taxi_warehouse
 
 ---
 
-## 4-2. T-SQL Notebook で Warehouse のテーブルを作成する
+## 4-2. T-SQL Notebook を Copilot に書かせて Warehouse のテーブルを作成する
 
 🤖 **Copilot に入力**
 
 ```text
-Lab 04 の T-SQL Notebook を taxi_warehouse に接続して Fabric に配置し、実行して。
-完了したら Notebook のリンクと実行状態を教えて。答え合わせはまだしないで。
+notebooks/specs の nb_04_build_warehouse の仕様を読んで、Fabric の T-SQL Notebook を
+work/notebooks/nb_04_build_warehouse.sql に生成して。ディメンションとファクトの CTAS を表ごとに説明してから、
+チェックを通して taxi_warehouse に接続して配置・実行して。
+完了したら Notebook のリンクと実行状態を教えて。失敗したら原因を説明して Notebook を直して。答え合わせはまだしないで。
 ```
 
 🤖 **Copilot の動き**
 
-- `python3 scripts/lab.py notebook deploy-run nb_04_build_warehouse` を実行します。
-  - `notebooks/nb_04_build_warehouse.sql`（Fabric の T-SQL Notebook 形式）の Warehouse ID を置き換えて配置
+- 仕様書 [`notebooks/specs/nb_04_build_warehouse.md`](../notebooks/specs/nb_04_build_warehouse.md) から、Fabric の T-SQL Notebook 形式（`notebook-content.sql`）で生成します。
   - CTAS（`CREATE TABLE AS SELECT`）で、Lakehouse を 3 部構成名（`taxi_lakehouse.dbo.<表>`）で参照して 7 表を作成
+  - Warehouse の ID は書かず、`{{WAREHOUSE_ID}}` にしておく（配置時に `lab.py` が置き換える）
+- `python3 scripts/lab.py notebook check nb_04_build_warehouse` で約束を確認してから、`python3 scripts/lab.py notebook deploy-run nb_04_build_warehouse` で配置・実行します。
+- 失敗したら `result.error` とセル出力から原因を説明し、生成した Notebook を直して再実行します（模範解答は `--reference`）。
 
 > 🛟 **Gate G3**: T-SQL Notebook の API 実行がテナントで許可されていない場合、実行は失敗します。
-> その場合は 🌐 Notebook のリンクを開き、**すべて実行** を選んでください（コードは配置済み）。
+> その場合は 🌐 Notebook のリンクを開き、**すべて実行** を選んでください（Copilot が生成したコードは配置済み）。
 
 🌐 **ブラウザ**（任意）: Notebook を開き、各セルの SQL と、最後のセルの件数表を確認します。
 
@@ -84,7 +88,7 @@ taxi_warehouse のテーブルを検証 Notebook で確認して。
 ## ✅ チェックポイント
 
 - [ ] `taxi_warehouse` に 7 表が作成された
-- [ ] T-SQL Notebook `nb_04_build_warehouse` が Fabric にある
+- [ ] Copilot が生成した T-SQL Notebook `nb_04_build_warehouse` が Fabric にある
 - [ ] `nb_04_validate_warehouse` の結果が `passed: true`
 
 ## 🧹 トラブルシュート

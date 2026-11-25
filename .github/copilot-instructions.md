@@ -51,8 +51,16 @@ Azure / Fabric を操作する前に、必ずこのファイルを読む。フ�
 ## データ加工は Fabric Notebook で行う
 
 - 業務データの取り込み・加工・検証をローカルの pandas などで実行しない。一時的な Livy セッションだけで済ませない。
-- Notebook は `notebooks/` の原本を `python3 scripts/lab.py notebook deploy-run <名前>` で Fabric アイテムとして配置・実行する。
-  Notebook のコードを Lab の指示なしに書き換えない。変更が必要なら差分を説明して承認を得る。
+- 加工・Warehouse 作成・Ontology 用テーブル・Data Agent 作成の Notebook（`nb_02_prepare_trips`、`nb_03_prepare_dimensions`、
+  `nb_04_build_warehouse`、`nb_07_prepare_ontology`、`nb_08_create_agents`）は、**Copilot が仕様書から生成する**。
+  - `notebooks/specs/README.md`（共通の約束）と `notebooks/specs/<名前>.md` を読み、`work/notebooks/<名前>.ipynb`（nb_04 は `.sql`）に書く。
+  - 生成後にセル構成を受講者に要約し、`python3 scripts/lab.py notebook check <名前>` を通してから
+    `python3 scripts/lab.py notebook deploy-run <名前>` で Fabric アイテムとして配置・実行する。
+  - 失敗したら `result.error` とセル出力から原因を説明し、**生成した Notebook を直して** 再実行する。
+  - 仕様書にない ID・トークン・接続文字列を書かない。ID は `lab.py` の配置時の埋め込み（既定 Lakehouse、`{{WAREHOUSE_ID}}`、`{{AGENT_CONFIG_B64}}`）に任せる。
+  - `reference/notebooks/` の模範解答は、受講者が求めたときか、生成と修正を繰り返しても通らないときだけ `--reference` で使う。
+    先に模範解答をコピーして生成の代わりにしない。
+- 検証 Notebook（`notebooks/*_validate_*`）、`tests/expected/`、`scripts/lab.py` を、生成した Notebook を通すために書き換えない。
 - 配置完了と実行完了を区別し、Notebook のリンク、実行状態、`result` の内容を報告する。
 - 「加工」の依頼では加工と保存の結果だけを報告する。答え合わせは検証 Notebook の依頼で行う。
 - 検証 Notebook はデータを変更しない。不一致は修正せず、期待値・実測値・差異を報告する。
@@ -64,7 +72,7 @@ Azure / Fabric を操作する前に、必ずこのファイルを読む。フ�
 - セマンティックモデルは `python3 scripts/lab.py semantic-model` でプレビュー後、`--apply` で配置する。
 - Ontology（新しい体験）は `python3 scripts/lab.py ontology` でプレビュー後、`--apply` で REST API から作成・更新する。
   TMDL を手書きで改変しない。旧体験（V1）の JSON 定義を作らない。
-- Data Agent は `nb_08_create_agents` Notebook（fabric-data-agent-sdk）で作成・公開する。ポータル操作は
+- Data Agent は Copilot が仕様書から生成した `nb_08_create_agents` Notebook（fabric-data-agent-sdk）で作成・公開する。ポータル操作は
   Notebook が失敗した場合の代替としてだけ案内する。
 - Data Agent への質問は `python3 scripts/lab.py agent-ask` / `agent-compare`（公開済み Agent の MCP）を使う。
   回答を推測で補わない。取得できなかった根拠は「取得できない」と書く。

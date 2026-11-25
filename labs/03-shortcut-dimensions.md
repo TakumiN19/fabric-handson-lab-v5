@@ -1,9 +1,9 @@
 # Lab 03 — ショートカットとマスター整備
 
-所要時間: 約 15 分　／　前提: [Lab 02](02-notebook-ingest-transform.md) 完了
+所要時間: 約 20 分　／　前提: [Lab 02](02-notebook-ingest-transform.md) 完了
 
 このラボでは、講師が用意した共有 ADLS Gen2 の CSV を、**コピーせずに** OneLake ショートカットで参照し、
-Notebook でゾーンマスターとコード表を整備します。
+GitHub Copilot が仕様書から書いた Notebook で、ゾーンマスターとコード表を整備します。
 
 ```text
 （講師が準備済み）                         （あなたが実施）
@@ -43,17 +43,22 @@ ADLS Gen2 の CSV + 共有接続  ──▶  Shortcut Files/taxi_zone ──▶ 
 
 ---
 
-## 3-2. マスターを Notebook で整備する
+## 3-2. マスター整備 Notebook を Copilot に書かせて実行する
 
 🤖 **Copilot に入力**
 
 ```text
-Lab 03 のマスター整備 Notebook を Fabric に配置して実行して。
+notebooks/specs の nb_03_prepare_dimensions の仕様を読んで、マスター整備の PySpark Notebook を
+work/notebooks/nb_03_prepare_dimensions.ipynb に生成して。セルの構成を説明してから、チェックを通して Fabric に配置・実行して。
 ショートカットのゾーン CSV と、ベンダー・料金コード・支払方法・乗車種別のコード表を Delta テーブルに保存して、
-保存したテーブルと件数を教えて。答え合わせはまだしないで。
+保存したテーブルと件数を教えて。失敗したら原因を説明して Notebook を直して。答え合わせはまだしないで。
 ```
 
-🤖 **Copilot の動き**: `python3 scripts/lab.py notebook deploy-run nb_03_prepare_dimensions`
+🤖 **Copilot の動き**
+
+- 仕様書 [`notebooks/specs/nb_03_prepare_dimensions.md`](../notebooks/specs/nb_03_prepare_dimensions.md) から Notebook を生成します（コード表の値も仕様書のとおり）。
+- `python3 scripts/lab.py notebook check nb_03_prepare_dimensions` で約束を確認してから、`python3 scripts/lab.py notebook deploy-run nb_03_prepare_dimensions` で配置・実行します。
+- 失敗したら `result.error` とセル出力から原因を説明し、生成した Notebook を直して再実行します（模範解答は `--reference`）。
 
 ✅ **期待する結果**
 
@@ -100,7 +105,7 @@ Lab 03 のマスター整備 Notebook を Fabric に配置して実行して。
 ## ✅ チェックポイント
 
 - [ ] ショートカット `taxi_zone` が作成された
-- [ ] `nb_03_prepare_dimensions` が Completed、マスター 5 表が保存された
+- [ ] Copilot が生成した `nb_03_prepare_dimensions` が Completed、マスター 5 表が保存された
 - [ ] `nb_03_validate_dimensions` の結果が `passed: true`
 
 ## 🧹 トラブルシュート

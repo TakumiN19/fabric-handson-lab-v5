@@ -9,7 +9,7 @@ V3 からの主な変更点は次のとおりです。
 |---|---|
 | 講師準備を独立 | [`instructor/`](instructor/00-overview.md) に準備・リハーサル・当日運用・片付けを手順化 |
 | 入力先を明示 | 各手順に「🤖 Copilot に入力」「⌨️ ターミナル」「🌐 ブラウザ」のどれか 1 つだけを表示 |
-| 加工は Notebook | 取り込み・加工・検証・Agent 作成を Fabric の Notebook アイテムとして保存・実行 |
+| Notebook も Copilot が書く | 加工・Warehouse 作成・Agent 作成の Notebook は、仕様書から GitHub Copilot がコードを生成し、Fabric の Notebook アイテムとして配置・実行（答え合わせは教材提供の検証 Notebook） |
 | Ontology を追加 | セマンティックモデルとの違いを学び、Ontology（新しい体験）を API で作成 |
 | Data Agent を比較 | 同じ指示で接続先だけ異なる 2 つの Agent を Notebook で作り、同じ質問で比較 |
 | Rayfin の認証を修正 | Codespaces でも止まらない認証ラッパーと、プロキシ不要の Data Agent チャット |
@@ -28,8 +28,8 @@ Lab 00 準備 → 01 サインイン → 02 Notebook で加工 → 03 ショー�
 | — | [講師の事前準備](instructor/00-overview.md) | 容量・権限・共有接続・リハーサル結果 | 開催前 |
 | 00 | [環境の準備と参加者登録](labs/00-setup.md) | （ローカル設定） | 15 分 |
 | 01 | [サインインと接続確認](labs/01-sign-in.md) | — | 15 分 |
-| 02 | [Notebook で取り込み・加工・検証](labs/02-notebook-ingest-transform.md) | Lakehouse、Notebook 2 本、Delta 表 | 30 分 |
-| 03 | [ショートカットとマスター整備](labs/03-shortcut-dimensions.md) | Shortcut、Notebook 2 本、マスター 5 表 | 15 分 |
+| 02 | [Notebook で取り込み・加工・検証](labs/02-notebook-ingest-transform.md) | Lakehouse、Copilot が生成した Notebook、検証 Notebook、Delta 表 | 40 分 |
+| 03 | [ショートカットとマスター整備](labs/03-shortcut-dimensions.md) | Shortcut、Copilot が生成した Notebook、検証 Notebook、マスター 5 表 | 20 分 |
 | 04 | [Warehouse（T-SQL Notebook）](labs/04-warehouse-tsql-notebook.md) | Warehouse、T-SQL Notebook、検証 Notebook | 25 分 |
 | 05 | [セマンティックモデル](labs/05-semantic-model.md) | Direct Lake モデル `sm_taxi` | 20 分 |
 | 06 | [Power BI レポート](labs/06-powerbi-report.md) | レポート `rpt_taxi_analysis` | 20 分 |
@@ -100,7 +100,9 @@ Codespace では次のツールが検証済みバージョンで自動導入さ�
 | `labs/` | 受講者向け手順書 |
 | `instructor/` | 講師向けの準備・運用手順 |
 | `reference/` | 手動コマンド、ローカル環境、認証トラブルシュート |
-| `notebooks/` | Fabric に配置する Notebook の原本（`scripts/dev/build_notebooks.py` から生成） |
+| `notebooks/specs/` | Copilot が Notebook を生成するための仕様書（受講者は `work/notebooks/` に生成。Git 対象外） |
+| `notebooks/` | 教材提供の検証 Notebook（読み取り専用の採点役） |
+| `reference/notebooks/` | 生成対象 Notebook の模範解答（`--reference` で配置。いずれも `scripts/dev/build_notebooks.py` から生成） |
 | `scripts/lab.py` | Copilot が使う Fabric 操作コマンド（確認・配置・実行・検証） |
 | `scripts/rayfin_az.py` | Codespaces でも使える Rayfin の認証ラッパー |
 | `scripts/doctor.py` | 読み取り専用の環境診断 |

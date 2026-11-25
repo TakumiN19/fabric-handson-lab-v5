@@ -35,7 +35,8 @@
 |---|---|---|---|
 | G1 認証 | Codespaces で Copilot・Azure CLI がデバイスコードでサインインできる | Lab 00〜01 | [reference/auth-troubleshooting.md](../reference/auth-troubleshooting.md) |
 | G2 Notebook 実行 | API で配置した PySpark Notebook が受講者の権限で実行できる | Lab 02 | ポータルで Notebook を開いて「すべて実行」 |
-| G3 T-SQL Notebook | `nb_04_build_warehouse` が API 実行で完了する | Lab 04 | ポータルで開いて「すべて実行」（Notebook は配置済み） |
+| G2b Notebook 生成 | 受講者の Copilot が `notebooks/specs/` から生成した Notebook が `notebook check` を通り、検証 Notebook で `passed: true` | Lab 02〜04・07・08 | `notebook deploy-run <名前> --reference`（模範解答）で進め、差分を後で解説 |
+| G3 T-SQL Notebook | `nb_04_build_warehouse` が API 実行で完了する | Lab 04 | ポータルで開いて「すべて実行」（生成した Notebook は配置済み） |
 | G4 Direct Lake | `sm_taxi` が Warehouse の OneLake データで表示できる | Lab 05〜06 | ポータルでモデルの「更新」 |
 | G5 Ontology | `onto_taxi` が API で作成され、定義を読み戻せる | Lab 07 | 講師が作成済み定義を確認し、エラーを `instructor/` に記録 |
 | G6 Data Agent | `nb_08_create_agents` で 2 Agent が作成・公開される | Lab 08 | [03](03-app-and-agent-auth.md) のポータル手順 |
